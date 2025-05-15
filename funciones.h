@@ -37,3 +37,10 @@ void iniciar_fork_pipes(int num_procesos, int pipes[]);
 //Rec: void
 
 void lider(int num_procesos, int pipes[]);
+
+
+//Descripcion: Funcion para parseo de argumentos (t, M, p)
+//Dom: argc X argv X num_procesos X token X M
+//Rec: void
+
+void parseo_argumentos(int argc, char * argv[], int * num_procesos, int * token, int * M);
