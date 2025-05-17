@@ -15,28 +15,28 @@
 //Dom: id_proceso X token X M X num_procesos X pipe_in X pipe_out
 //Rec: void
 
-void anillo_procesos(int id_proceso, int token, int M, int num_procesos, int pipe_in, int pipe_out);
+void anillo_procesos(int id_proceso, int M, int num_procesos, int pipe_in, int pipe_out);
 
 
 //Descripcion: Funcion que permite inicio de pipes
 //Dom: num_procesos X pipes
 //Rec: void
 
-void iniciar_pipes(int num_procesos, int pipes[]);
+void iniciar_pipes(int num_procesos, int pipes[][2]);
 
 
 //Descripcion: Funcion para crear fork con pipes
 //Dom: num_procesos X pipes
 //Rec: void
 
-void iniciar_fork_pipes(int num_procesos, int pipes[]);
+void iniciar_fork_pipes(int num_procesos, int pipes[][2], int token, int M);
 
 
 //Descripcion: Funcion para iniciar el lider de los procesos
 //Dom: num_procesos X pipes
 //Rec: void
 
-void lider(int num_procesos, int pipes[]);
+void lider(int num_procesos, int pipes[][2]);
 
 
 //Descripcion: Funcion para parseo de argumentos (t, M, p)
@@ -44,3 +44,17 @@ void lider(int num_procesos, int pipes[]);
 //Rec: void
 
 void parseo_argumentos(int argc, char * argv[], int * num_procesos, int * token, int * M);
+
+
+//Descripcion: Funcion para elegir un lider
+//Dom: num_procesos X procesos
+//Rec: proceso lider
+
+int elegir_lider(int num_procesos, int procesos_vivos[]);
+
+
+//Descripcion: Funcion que permite notificar eliminacion de un proceso
+//Dom: id_proceso X num_procesos X pipes X procesos_vivos
+//Rec: void
+
+void anunciar_eliminado(int id_proceso, int num_procesos, int pipes[][2], int procesos_vivos[]);
