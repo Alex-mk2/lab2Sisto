@@ -1,68 +1,38 @@
 #include "funciones.h"
-#include <bits/getopt_core.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 
+//************************************Desglose funciones**********************************//
 
-//Descripcion: Funcion para procesar anillo de procesos
-//Dom: id_proceso X token X M X num_procesos X pipe_in X pipe_out
+
+
+
+
+
+
+//Descripcion: Funcion que permite configurar el anillo de procesos con pipes
+//Dom: id_proceso X num_procesos X pipes
 //Rec: void
 
-void anillo_procesos(int id_proceso, int M, int num_procesos, int pipe_in, int pipe_out){
-    srand(time(NULL) + id_proceso);
+void configurar_anillo_proc(int id_proceso, int num_procesos, int pipes[][2]){
+    int entrada = (id_proceso + num_procesos - 1) % num_procesos;
+    int salida = id_proceso;
 
-    //Se crea para conocer el token actual del proceso
-    int token_actual;
+    //Manejo con dup2 para redirecciones tanto entrada y salida de archivos
+    dup2(pipes[entrada][0], STDIN_FILENO);
+    dup2(pipes[salida][1], STDOUT_FILENO);
 
-    //Se utiliza un entero con signo para saber el valor del token y procesarlo con los pipes
-    ssize_t paridad_token;
-
-    //Se ejecuta un ciclo "True"...
-    while(1){
-        //Se lee el token de entrada
-        paridad_token = read(pipe_in, &token_actual, sizeof(int));
-
-        if(paridad_token == 0){
-            close(pipe_in);
-            exit(0);
-        }
-
-        if(paridad_token < 0){
-            perror("Error lectura pipe in");
-            exit(EXIT_FAILURE);
-        }
-
-        int decremento = rand() % M;
-        int token_recibido = token_actual;
-        token_actual -= decremento;
-
-
-        printf("Proceso %d; Token recibido: %d; Token resultante: %d\n", id_proceso, token_recibido, token_actual);
-
-        //Limpieza archivo salida
-        fflush(stdout);
-
-        //Ahora si el token es negativo
-
-        if(token_actual < 0){
-            //Notificar eliminacion (se debe incorporar funcion...)
-            if (write(pipe_out, &token_actual, sizeof(int)) != sizeof(int)) {
-                perror("Error en la escritura del pipe de salida");
-                exit(EXIT_FAILURE);
-                
-            }
-            exit(id_proceso);
-        }
-
-        if (write(pipe_out, &token_actual, sizeof(int)) != sizeof(int)) {
-            perror("Error en la escritura del pipe de salida");
-            exit(EXIT_FAILURE);
-        }
-
-        sleep(1);
+    //Ahora se cierran los pipes
+    int i;
+    for(i = 0; i < num_procesos;i++){
+        close(pipes[i][0]);
+        close(pipes[i][1]);
     }
+
 }
 
 
@@ -70,122 +40,246 @@ void anillo_procesos(int id_proceso, int M, int num_procesos, int pipe_in, int p
 //Dom: num_procesos X pipes
 //Rec: void
 
-void iniciar_pipes(int num_procesos, int pipes[][2]){
-    int i;
+int iniciar_pipes(int num_procesos, int pipes[][2]){
+    int i, j;
     for(i = 0; i < num_procesos; i++){
         if(pipe(pipes[i]) == -1){
             perror("Error creacion de pipe");
-            exit(EXIT_FAILURE);
+            for(j = 0; j < i; j++){
+                close(pipes[j][0]);
+                close(pipes[j][1]);
+            }
+            return -1;
         }
     }
+    return 0;
 }
 
-//Descripcion: Funcion que permite seleccionar al lider
-//Dom: num_procesos X pipes
-//Rec: void
+//Descripcion: Funcion auxiliar que permite obtener el decremento
+//Dom: M
+//Rec: numero decrementado
 
-void lider(int num_procesos, int pipes[][2]){
-    int nuevo_lider = num_procesos - 1;
-    printf("El nuevo lider es: (Proceso %d\n)", nuevo_lider);
+int decremento(int M){
+    int dec = rand() % M;
+    return dec;
 }
+
+//Descripcion: Funcion que aplica el decremento al token
+//Dom: token X M
+//Rec: numero con el decremento aplicado
+
+int aplicar_decremento(int token, int M){
+    int dec = decremento(M);
+    return (token - dec);
+}
+
+
 
 //Descripcion: Funcion que permite el parseo de argumentos ingresados
-//Dom: argc X argv X num_procesos X token X M
-//Rec: void
+//Dom: argc X argv X num_procesos X token X M X debug
+//Rec: (True si se realizo operacion, false en caso que no)
 
-void parseo_argumentos(int argc, char * argv[], int * num_procesos, int * token, int * M){
+
+bool parseo_argumentos(int argc, char *argv[],int *num_procesos, int * token, int *M, bool *debug_flag) {
     int opt;
     *num_procesos = 4;
-    *token = 10;
-    *M = 10;
-    
-    while ((opt = getopt(argc, argv, "t:M:p:")) != -1){
+    *token         = 10;
+    *M             = 10;
+    *debug_flag    = false;
+
+    while ((opt = getopt(argc, argv, "p:t:M:Dh")) != -1) {
         switch (opt) {
+            case 'p':
+                *num_procesos = atoi(optarg);
+                break;
             case 't':
                 *token = atoi(optarg);
                 break;
             case 'M':
                 *M = atoi(optarg);
                 break;
-            case 'p':
-                *num_procesos = atoi(optarg);
+            case 'D':
+                *debug_flag = true;
                 break;
+            case 'h':
+                printf("Uso: %s -p <n_procesos> -t <token_inicial> -M <max_decremento> [-D] [-h]\n",
+                       argv[0]);
+                return false;
             default:
-                fprintf(stderr, "Uso: %s -t token -M decremento -p num_procesos\n", argv[0]);
-                exit(EXIT_FAILURE);
+                return false;
         }
     }
-}
 
-//Descripcion: Funcion que permite la eleccion de un lider
-//Dom: num_procesos X procesos_vivos
-//Rec: proceso_lider
-
-int elegir_lider(int num_procesos, int procesos_vivos[]){
-    int maximo = procesos_vivos[0];
-
-    int i;
-    for(i = 0; i < num_procesos;i++){
-        if(procesos_vivos[i] > maximo){
-            maximo = procesos_vivos[i];
-        }
+    if (*num_procesos <= 0) {
+        fprintf(stderr, "Error: -p debe ser un entero > 0\n");
+        return false;
     }
-    return maximo;
+    if (*token < 0) {
+        fprintf(stderr, "Error: -t debe ser un entero >= 0\n");
+        return false;
+    }
+    if (*M <= 0) {
+        fprintf(stderr, "Error: -M debe ser un entero > 0\n");
+        return false;
+    }
+    return true;
 }
 
-//Descripcion: Funcion que permite el manejo de fork a traves de pipes
-//Dom: num_procesos X pipes X token X M
+
+//Descripcion: Funcion que permite notificar la eliminacion de un proceso
+//Dom: id_proceso X num_procesos X pipes
 //Rec: void
 
-void iniciar_fork_pipes(int num_procesos, int pipes[][2], int token, int M){
-    int i, j;
-    for(i = 0; i < num_procesos; i++){
-        //Se inicia fork
+void notifica_eliminacion(int id_proceso, int num_procesos, int pipes[][2]){
+    
+    //Escribir archivo de salida el id del proceso que fue eliminado
+    if(write(STDOUT_FILENO, &id_proceso, sizeof(int)) == -1){
+        perror("Error al notificar eliminacion");
+        exit(EXIT_FAILURE);
+    }
+}
+
+
+//Descripcion: Funcion auxiliar para procesar y imprimir token
+//Dom: token X id_proceso X token_resultante
+//Rec: void
+
+void imprimir_token(int id_proceso, int token, int token_resultante){
+    printf("Proceso %d; Token recibido: %d; Token resultante: %d\n",
+           id_proceso, token, token_resultante);
+    fflush(stdout);
+}
+
+
+//Descripcion: Funcion que permite el inicio de ronda de procesos (papa caliente)
+//Dom: id_proceso_lider X token_inicial X num_procesos X pipes
+//Rec: void
+
+void iniciar_ronda(int id_proceso_lider, int token_inicial, int num_procesos, int pipes[][2]){
+    //Escritura archivo de salida
+    if(write(pipes[id_proceso_lider][1], &token_inicial, sizeof(int)) == -1){
+        perror("Error al iniciar ronda");
+    }
+    printf("Líder %d inicia nueva ronda con token %d\n",
+           id_proceso_lider, token_inicial);
+    fflush(stdout);
+}
+
+
+//Descripcion: Funcion que permite leer el resultado del proceso ganador
+//Dom: num_procesos x pipes
+//Rec: void
+
+void leer_ganador(int num_procesos, int pipes[][2], int token_inicial){
+    bool alive[num_procesos];
+    memset(alive, true, sizeof(alive));
+    int vivos = num_procesos;
+
+    //Se cierran los pipes, solo se realizara lectura
+    for (int i = 0; i < num_procesos; ++i) {
+        close(pipes[i][1]);
+    }
+
+    while (vivos > 1) {
+        int eliminado;
+        if (read(pipes[0][0], &eliminado, sizeof(eliminado)) <= 0) {
+            perror("parent_listen: read");
+            return;
+        }
+
+        alive[eliminado] = false;
+        vivos--;
+
+        int candidato = (eliminado + 1) % num_procesos;
+        while (!alive[candidato]) {
+            candidato = (candidato + 1) % num_procesos;
+        }
+
+        iniciar_ronda(candidato, token_inicial,
+                      num_procesos, pipes);
+    }
+
+    //Se toma el proceso ganador
+    for (int i = 0; i < num_procesos; ++i) {
+        if (alive[i]) {
+            printf("Proceso %d es el ganador\n", i);
+            break;
+        }
+    }
+}
+
+
+
+//Descripcion: Funcion que permite la creacion del anillo de procesos (fork)
+//Dom: num_procesos X pipes
+//Rec: numero
+
+int iniciar_anillo_proc(int num_procesos, int pipes[][2]){
+    int i;
+    for(i = 0; i < num_procesos;i++){
         pid_t pid = fork();
         if(pid < 0){
-            perror("Error al crear proceso hijo");
+            perror("Error al crear al hijo");
+            exit(EXIT_FAILURE);
+        }
+        if(pid == 0){ //Se crea el hijo
+            return i;
+        }
+    }
+    return -1;
+}
+
+//Descripcion: Funcion que permite crear anillo procesos
+//Dom: id_proceso X token_inicial X M X num_procesos X pipes X D
+//Rec: void
+
+void anillo_proc(int id_proceso, int token_inicial, int M, int num_procesos, int pipes[][2], bool D){
+    //Se llama a la funcion configurar anillo proc
+    configurar_anillo_proc(id_proceso, num_procesos, pipes);
+
+    //Se genera la semilla
+    srand(time(NULL) + id_proceso);
+
+    //Se crea el token
+    int token;
+
+    while(1){
+        //Se lee el token
+        ssize_t read_token = read(STDIN_FILENO, &token, sizeof(int));
+        
+        if(read_token < 0){
+            perror("Error al leer el token");
             exit(EXIT_FAILURE);
         }
 
-        if(pid == 0){
-            //Se crea proceso hijo
-            for(j = 0; j < num_procesos; j++){
-                if(j != i) close(pipes[j][0]);
-                if(j != (i + 1) % num_procesos) close(pipes[j][1]);
+        //Para el termino de ronda
+        if(token < 0){
+            //Se escribe el token
+            if(write(STDOUT_FILENO, &token, sizeof(int)) == -1){
+                perror("Envio token");
             }
+            exit(EXIT_SUCCESS);
 
-            //Se redirigen tanto a salida como entrada a esos pipes
-            dup2(pipes[i][0], STDIN_FILENO);
-            dup2(pipes[(i + 1) % num_procesos][1], STDOUT_FILENO);
+        }
 
-            //En los mismos pipes redirigidos, se cierran
-            close(pipes[i][0]);
-            close(pipes[(i + 1) % num_procesos][1]);
+        //Ahora se hace modificaciones al token
+        int token_original = token;
+        token = aplicar_decremento(token, M);
 
-            //Se ejecuta la funcion anillo_procesos
-            anillo_procesos(i, M, num_procesos, STDIN_FILENO, STDOUT_FILENO);
-            exit(0);
+        //Debugear en caso de
+        if(D){
+            imprimir_token(id_proceso, token_original, token);
+        }
+
+        //Comprobar eliminacion
+        if(token <= 0){
+            notifica_eliminacion(id_proceso, num_procesos, pipes);
+            exit(EXIT_SUCCESS);
+        }else{
+            if(write(STDOUT_FILENO, &token, sizeof(int)) == -1){
+                perror("Error escritura token");
+                exit(EXIT_FAILURE);
+            }
         }
     }
-}
-
-//Descripcion: Funcion que permite anunciar el proceso eliminado
-//Dom: id_proceso X num_procesos X pipes X procesos_vivos
-//Rec: void
-
-void anunciar_eliminado(int id_proceso, int num_procesos, int pipes[][2], int procesos_vivos[]){
-    printf("Proceso %d eliminado: ", id_proceso);
-    procesos_vivos[id_proceso] = 0; //Un proceso menos
-
-    //Cierre de pipes...
-    close(pipes[id_proceso][1]);
-
-    int i;
-
-    //Se recorren los procesos que aun siguen con vida
-    for(i = id_proceso; i < num_procesos -1; i++){
-        pipes[i][0] = pipes[i + 1][0];
-        pipes[i][1] = pipes[i + 1][1];
-    }
-
 }

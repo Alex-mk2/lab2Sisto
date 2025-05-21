@@ -1,60 +1,94 @@
 //Librerias a utilizar//
+#ifndef FUNCIONES_H
+#define FUNCIONES_H
 #include <stdio.h>
 #include <stdlib.h>
-#include <getopt.h>
 #include <unistd.h>
-#include <sys/wait.h>
 #include <time.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <getopt.h>
+#include <stdbool.h>
+#include <string.h>
+
+//****************************Comienzo y desglose de funciones******************************//
 
 
 
-
-//Comienzo y desglose de funciones//
-
-//Descripcion: Funcion que permite procesar anillo de procesos
-//Dom: id_proceso X token X M X num_procesos X pipe_in X pipe_out
+//Descripcion: Funcion que permite configurar el anillo de procesos con pipes
+//Dom: id_proceso X num_procesos X pipes
 //Rec: void
 
-void anillo_procesos(int id_proceso, int M, int num_procesos, int pipe_in, int pipe_out);
+void configurar_anillo_proc(int id_proceso, int num_procesos, int pipes[][2]);
 
 
 //Descripcion: Funcion que permite inicio de pipes
 //Dom: num_procesos X pipes
 //Rec: void
 
-void iniciar_pipes(int num_procesos, int pipes[][2]);
+int iniciar_pipes(int num_procesos, int pipes[][2]);
 
 
-//Descripcion: Funcion para crear fork con pipes
+//Descripcion: Funcion auxiliar que permite obtener el decremento
+//Dom: M
+//Rec: numero decrementado
+
+int decremento(int M);
+
+
+//Descripcion: Funcion que aplica el decremento al token
+//Dom: token X M
+//Rec: numero con el decremento aplicado
+
+int aplicar_decremento(int token, int M);
+
+
+//Descripcion: Funcion que permite el parseo de argumentos ingresados
+//Dom: argc X argv X num_procesos X token X M X Debug
+//Rec: (True si se realizo operacion, false en caso que no)
+
+
+bool parseo_argumentos(int argc, char *argv[],int *num_procesos,int *token, int *M, bool *debug_flag);
+
+//Descripcion: Funcion que permite notificar la eliminacion de un proceso
+//Dom: id_proceso X num_procesos X pipes
+//Rec: void
+
+void notifica_eliminacion(int id_proceso, int num_procesos, int pipes[][2]);
+
+
+//Descripcion: Funcion auxiliar para procesar y imprimir token
+//Dom: token X id_proceso X token_resultante
+//Rec: void
+
+void imprimir_token(int id_proceso, int token, int token_resultante);
+
+
+//Descripcion: Funcion que permite el inicio de ronda de procesos (papa caliente)
+//Dom: id_proceso_lider X token_inicial X num_procesos X pipes
+//Rec: void
+
+void iniciar_ronda(int id_proceso_lider, int token_inicial, int num_procesos, int pipes[][2]);
+
+
+//Descripcion: Funcion que permite leer el resultado del proceso ganador
+//Dom: num_procesos x pipes
+//Rec: void
+
+void leer_ganador(int num_procesos, int pipes[][2], int token_inicial);
+
+//Descripcion: Funcion que permite la creacion del anillo de procesos (fork)
 //Dom: num_procesos X pipes
+//Rec: numero
+
+int iniciar_anillo_proc(int num_procesos, int pipes[][2]);
+
+//Descripcion: Funcion que permite crear anillo procesos
+//Dom: id_proceso X token_inicial X M X num_procesos X pipes X D
 //Rec: void
 
-void iniciar_fork_pipes(int num_procesos, int pipes[][2], int token, int M);
+void anillo_proc(int id_proceso, int token_inicial, int M, int num_procesos, int pipes[][2], bool D);
 
 
-//Descripcion: Funcion para iniciar el lider de los procesos
-//Dom: num_procesos X pipes
-//Rec: void
 
-void lider(int num_procesos, int pipes[][2]);
-
-
-//Descripcion: Funcion para parseo de argumentos (t, M, p)
-//Dom: argc X argv X num_procesos X token X M
-//Rec: void
-
-void parseo_argumentos(int argc, char * argv[], int * num_procesos, int * token, int * M);
-
-
-//Descripcion: Funcion para elegir un lider
-//Dom: num_procesos X procesos
-//Rec: proceso lider
-
-int elegir_lider(int num_procesos, int procesos_vivos[]);
-
-
-//Descripcion: Funcion que permite notificar eliminacion de un proceso
-//Dom: id_proceso X num_procesos X pipes X procesos_vivos
-//Rec: void
-
-void anunciar_eliminado(int id_proceso, int num_procesos, int pipes[][2], int procesos_vivos[]);
+#endif 
