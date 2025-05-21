@@ -2,11 +2,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/wait.h>
-
+#include <stdbool.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[]) {
     int num_procesos, token_inicial, M;
     bool debug_flag;
+
     if (!parseo_argumentos(argc, argv,
                            &num_procesos,
                            &token_inicial,
@@ -22,24 +24,33 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Error al inicializar los pipes\n");
         exit(EXIT_FAILURE);
     }
+    int log_pipe[2];
+    if (pipe(log_pipe) == -1) {
+        perror("Error al crear log_pipe");
+        exit(EXIT_FAILURE);
+    }
     int id = iniciar_anillo_proc(num_procesos, pipes);
-    if (id == -1) {
+
+    if (id == -1){
+        close(log_pipe[1]);
+
+        //Inicio ronda
         iniciar_ronda(0, token_inicial, num_procesos, pipes);
-        leer_ganador(num_procesos, pipes, token_inicial);
+        coordinar_juego(num_procesos,
+                        pipes,
+                        log_pipe[0],
+                        token_inicial);
+
+        //Cerrar pipes
+        close(log_pipe[0]);
         for (int i = 0; i < num_procesos; ++i) {
             wait(NULL);
         }
     } else {
-        anillo_proc(id,
-                    token_inicial,
-                    M,
-                    num_procesos,
-                    pipes,
-                    debug_flag);
+        close(log_pipe[0]);
+        anillo_proc(id,token_inicial,M,num_procesos,pipes,debug_flag, log_pipe[1]);
+        
     }
+
     return EXIT_SUCCESS;
 }
-
-
-
-

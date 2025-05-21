@@ -127,13 +127,11 @@ bool parseo_argumentos(int argc, char *argv[],int *num_procesos, int * token, in
 
 
 //Descripcion: Funcion que permite notificar la eliminacion de un proceso
-//Dom: id_proceso X num_procesos X pipes
+//Dom: id_proceso X padre
 //Rec: void
 
-void notifica_eliminacion(int id_proceso, int num_procesos, int pipes[][2]){
-    
-    //Escribir archivo de salida el id del proceso que fue eliminado
-    if(write(STDOUT_FILENO, &id_proceso, sizeof(int)) == -1){
+void notifica_eliminacion(int id_proceso, int log_padre) {
+    if (write(log_padre, &id_proceso, sizeof(int)) == -1) {
         perror("Error al notificar eliminacion");
         exit(EXIT_FAILURE);
     }
@@ -166,40 +164,44 @@ void iniciar_ronda(int id_proceso_lider, int token_inicial, int num_procesos, in
 }
 
 
-//Descripcion: Funcion que permite leer el resultado del proceso ganador
-//Dom: num_procesos x pipes
+//Descripcion: Funcion que permite coordinar el juego
+//Dom: num_procesos x pipes X log X token_inicial
 //Rec: void
 
-void leer_ganador(int num_procesos, int pipes[][2], int token_inicial){
+void coordinar_juego(int num_procesos,
+                     int pipes[][2],
+                     int log_fd,
+                     int token_inicial){
+
     bool alive[num_procesos];
     memset(alive, true, sizeof(alive));
     int vivos = num_procesos;
 
-    //Se cierran los pipes, solo se realizara lectura
-    for (int i = 0; i < num_procesos; ++i) {
-        close(pipes[i][1]);
-    }
+    iniciar_ronda(0, token_inicial, num_procesos, pipes);
 
     while (vivos > 1) {
         int eliminado;
-        if (read(pipes[0][0], &eliminado, sizeof(eliminado)) <= 0) {
-            perror("parent_listen: read");
-            return;
+        if (read(log_fd, &eliminado, sizeof(eliminado)) <= 0) {
+            perror("parent_listen: read log_fd");
+            break;
         }
 
         alive[eliminado] = false;
         vivos--;
-
         int candidato = (eliminado + 1) % num_procesos;
-        while (!alive[candidato]) {
+        while (!alive[candidato])
             candidato = (candidato + 1) % num_procesos;
-        }
 
-        iniciar_ronda(candidato, token_inicial,
-                      num_procesos, pipes);
+        //Reinicio token
+        iniciar_ronda(candidato, token_inicial, num_procesos, pipes);
     }
 
-    //Se toma el proceso ganador
+    //Cerrar los pipes
+    for (int i = 0; i < num_procesos; ++i) {
+        close(pipes[i][1]);
+    }
+
+
     for (int i = 0; i < num_procesos; ++i) {
         if (alive[i]) {
             printf("Proceso %d es el ganador\n", i);
@@ -233,50 +235,38 @@ int iniciar_anillo_proc(int num_procesos, int pipes[][2]){
 //Dom: id_proceso X token_inicial X M X num_procesos X pipes X D
 //Rec: void
 
-void anillo_proc(int id_proceso, int token_inicial, int M, int num_procesos, int pipes[][2], bool D){
-    //Se llama a la funcion configurar anillo proc
-    configurar_anillo_proc(id_proceso, num_procesos, pipes);
+void anillo_proc(int id_procesos,
+                 int token_inicial,
+                 int M,
+                 int num_procesos,
+                 int pipes[][2],
+                 bool D,
+                 int log_fd) {
+    configurar_anillo_proc(id_procesos, num_procesos, pipes);
+    srand(time(NULL) + id_procesos);
 
-    //Se genera la semilla
-    srand(time(NULL) + id_proceso);
-
-    //Se crea el token
     int token;
-
-    while(1){
-        //Se lee el token
-        ssize_t read_token = read(STDIN_FILENO, &token, sizeof(int));
-        
-        if(read_token < 0){
-            perror("Error al leer el token");
+    while (1) {
+        ssize_t n = read(STDIN_FILENO, &token, sizeof(token));
+        if (n < 0) {
+            perror("Error al leer token");
             exit(EXIT_FAILURE);
         }
-
-        //Para el termino de ronda
-        if(token < 0){
-            //Se escribe el token
-            if(write(STDOUT_FILENO, &token, sizeof(int)) == -1){
-                perror("Envio token");
-            }
+        if (token < 0) {
+            write(STDOUT_FILENO, &token, sizeof(token));
             exit(EXIT_SUCCESS);
-
         }
 
-        //Ahora se hace modificaciones al token
-        int token_original = token;
+        int original = token;
         token = aplicar_decremento(token, M);
+        if(D) imprimir_token(id_procesos, original, token);
 
-        //Debugear en caso de
-        if(D){
-            imprimir_token(id_proceso, token_original, token);
-        }
-
-        //Comprobar eliminacion
-        if(token <= 0){
-            notifica_eliminacion(id_proceso, num_procesos, pipes);
+        if(token <= 0) {
+            notifica_eliminacion(id_procesos, log_fd);
             exit(EXIT_SUCCESS);
-        }else{
-            if(write(STDOUT_FILENO, &token, sizeof(int)) == -1){
+        } else{
+
+            if(write(STDOUT_FILENO, &token, sizeof(token)) == -1) {
                 perror("Error escritura token");
                 exit(EXIT_FAILURE);
             }

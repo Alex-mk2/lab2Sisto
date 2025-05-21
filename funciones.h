@@ -54,7 +54,7 @@ bool parseo_argumentos(int argc, char *argv[],int *num_procesos,int *token, int 
 //Dom: id_proceso X num_procesos X pipes
 //Rec: void
 
-void notifica_eliminacion(int id_proceso, int num_procesos, int pipes[][2]);
+void notifica_eliminacion(int id_proceso, int log_padre);
 
 
 //Descripcion: Funcion auxiliar para procesar y imprimir token
@@ -71,11 +71,14 @@ void imprimir_token(int id_proceso, int token, int token_resultante);
 void iniciar_ronda(int id_proceso_lider, int token_inicial, int num_procesos, int pipes[][2]);
 
 
-//Descripcion: Funcion que permite leer el resultado del proceso ganador
-//Dom: num_procesos x pipes
+//Descripcion: Funcion que permite coordinar el juego
+//Dom: num_procesos x pipes X log X token_inicial
 //Rec: void
 
-void leer_ganador(int num_procesos, int pipes[][2], int token_inicial);
+void coordinar_juego(int num_procesos,
+                     int pipes[][2],
+                     int log_fd,
+                     int token_inicial);
 
 //Descripcion: Funcion que permite la creacion del anillo de procesos (fork)
 //Dom: num_procesos X pipes
@@ -87,7 +90,13 @@ int iniciar_anillo_proc(int num_procesos, int pipes[][2]);
 //Dom: id_proceso X token_inicial X M X num_procesos X pipes X D
 //Rec: void
 
-void anillo_proc(int id_proceso, int token_inicial, int M, int num_procesos, int pipes[][2], bool D);
+void anillo_proc(int id_procesos,
+                 int token_inicial,
+                 int M,
+                 int num_procesos,
+                 int pipes[][2],
+                 bool D,
+                 int log_fd); 
 
 
 
