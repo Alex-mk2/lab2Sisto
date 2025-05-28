@@ -9,6 +9,7 @@
 int main(int argc, char *argv[]) {
     srand(time(NULL));
 
+    //Se llama a la funcion parseo de argumentos
     bool es_hijo = parseo_argumentos(argc, argv);
     if(es_hijo){
         anillo_procesos(id_proceso);

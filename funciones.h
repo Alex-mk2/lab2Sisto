@@ -2,7 +2,7 @@
 #ifndef FUNCIONES_H
 #define FUNCIONES_H
 #include <stdbool.h>
-
+//Se utiliza stdbool para el parseo de argumentos ()
 
 
 
